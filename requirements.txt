@@ -11,3 +11,4 @@ wandb
 torchinfo
 tqdm
 sympy
+jaxlib

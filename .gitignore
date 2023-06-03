@@ -1,1 +1,5 @@
 .vscode
+qcrl/symbolic/__pycache__/general_canonical.cpython-39.pyc
+qcrl/symbolic/__pycache__/utils.cpython-39.pyc
+qcrl/readout_optimisation/simulations/__pycache__/params.cpython-39.pyc
+qcrl/readout_optimisation/simulations/__pycache__/utils.cpython-39.pyc

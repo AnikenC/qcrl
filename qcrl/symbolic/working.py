@@ -67,8 +67,24 @@ bd = Dagger(b)
 wb = symbols("omega_b", positive=True, commutative=True)
 
 alt_fourth_order = (
-    -anharm / 12 * (b * exp(-I * wb * t) + bd * exp(I * wb * t)) ** 4
-    + anharm / 1800 * (b * exp(-I * wb * t) + bd * exp(I * wb * t)) ** 6
+    -anharm
+    / 12
+    * (
+        q * exp(-I * w_q * t)
+        + qd * exp(I * w_q * t)
+        + c * g / delta * exp(-I * w_c * t)
+        + cd * g / delta * exp(I * w_c * t)
+    )
+    ** 4
+    + anharm
+    / 1800
+    * (
+        q * exp(-I * w_q * t)
+        + qd * exp(I * w_q * t)
+        + c * g / delta * exp(-I * w_c * t)
+        + cd * g / delta * exp(I * w_c * t)
+    )
+    ** 6
 )
 
 ccr_c_cd = Eq(Commutator(c, cd), 1)
@@ -95,23 +111,28 @@ transformed = powsimp(
     ).subs(out_of_rot_frame_list)
 )
 
-res_alt = powsimp(alt_fourth_order.expand().evaluate_with_ccr(alt_ccr_list))
+res_alt = powsimp(alt_fourth_order.expand().evaluate_with_ccr(ccr_list))
 transformed_alt = powsimp(
     res_alt.quantum_transformations(
         only_op_terms=True,
-        rwa_freq=ALT_MAX_FREQ,
-        rwa_args={wb: WB},
+        rwa_freq=RWA_MAX_FREQ,
+        rwa_args={w_c: W_C, w_q: W_Q},
         time_symbol=t,
         evaluate=True,
     )
 )
 
-com_term_b = powsimp(
-    -I * Commutator(b, transformed_alt).doit().expand().evaluate_with_ccr(alt_ccr_list)
+com_term_c = powsimp(
+    -I * Commutator(c, transformed_alt).doit().expand().evaluate_with_ccr(ccr_list)
 )
 
-custom_printer(transformed_alt, name="Alt Hamiltonian")
-custom_printer(com_term_b, name="Alt Commutator")
+com_term_q = powsimp(
+    -I * Commutator(q, transformed_alt).doit().expand().evaluate_with_ccr(ccr_list)
+)
+
+custom_printer(transformed_alt, name="Alt Hamiltonian", subs_list=subs_list)
+custom_printer(com_term_c, name="Alt Commutator c", subs_list=subs_list)
+custom_printer(com_term_q, name="Alt Commutator q", subs_list=subs_list)
 
 com_term_c = powsimp(
     Eq(
