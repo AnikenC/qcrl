@@ -1,0 +1,13 @@
+qiskit
+torch
+gymnasium
+tensorflow
+tensorflow_probability
+jax
+diffrax
+matplotlib
+pylatexenc
+wandb
+torchinfo
+tqdm
+sympy
