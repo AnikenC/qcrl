@@ -60,7 +60,9 @@ sym.Basic.quantum_transformations = lambda self, only_op_terms, rwa_freq, rwa_ar
 )
 
 
-def custom_printer(expr, name, subs_list=None, full_subs_list=None, cutoff_val=1e-3):
+def custom_printer(
+    expr, name, subs_list=None, full_subs_list=None, cutoff_val=1e-3, **kwargs
+):
     if full_subs_list is not None:
         subs_expr = expr.expand()
         if not isinstance(subs_expr, sym.Add):
@@ -93,5 +95,5 @@ def custom_printer(expr, name, subs_list=None, full_subs_list=None, cutoff_val=1
         print("### neglecting small values")
         pprint(final_expr)
 
-    print(f"latex version of final expr: {latex(final_expr)}")
+    print(f"latex version of final expr: {latex(final_expr, *kwargs)}")
     print("###")

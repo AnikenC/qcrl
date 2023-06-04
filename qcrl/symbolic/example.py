@@ -73,7 +73,7 @@ non_linear_ham = (
     )
     ** 4
     + anharm
-    * sqrt(ratio)
+    * sqrt(2 * ratio)
     / 360
     * (
         q * exp(-I * w_q * t)

@@ -57,18 +57,18 @@ non_linear_ham = (
     * (
         q * exp(-I * w_q * t)
         + qd * exp(I * w_q * t)
-        + g / delta * c * exp(-I * w_c * t)
-        + g / delta * cd * exp(I * w_c * t)
+        # + g / delta * c * exp(-I * w_c * t)
+        # + g / delta * cd * exp(I * w_c * t)
     )
     ** 4
     + anharm
-    * sqrt(ratio)
+    * sqrt(2 * ratio)
     / 360
     * (
         q * exp(-I * w_q * t)
         + qd * exp(I * w_q * t)
-        + g / delta * c * exp(-I * w_c * t)
-        + g / delta * cd * exp(I * w_c * t)
+        # + g / delta * c * exp(-I * w_c * t)
+        # + g / delta * cd * exp(I * w_c * t)
     )
     ** 6
 )
@@ -84,14 +84,9 @@ ccr_list = (ccr_c_cd, ccr_c_q, ccr_c_qd, ccr_cd_q, ccr_cd_qd, ccr_q_qd)
 
 res = powsimp(non_linear_ham.expand().evaluate_with_ccr(ccr_list))
 
-# Applies a quantum_transformations method I made
-# passing only_op_terms=True means only terms with operators are kept
-# passing the rwa_freq means the RWA will be applied
-# rwa_args are necessary if rwa_freq is passed,
-#   provide all the rotating frequencies of terms involved
-# time_symbol needs to be passed if you're using one in the expression
+
 transformed = powsimp(
-    res_combined.quantum_transformations(
+    res.quantum_transformations(
         only_op_terms=True,
         rwa_freq=RWA_MAX_FREQ,
         rwa_args={w_c: W_C, w_q: W_Q},
@@ -99,9 +94,6 @@ transformed = powsimp(
     )
 )
 
-# Evaluating the commutators, and then simplifying the expressions again
-# Useful for the Master Equations
-# Notice that commutators have an additional doit() method which explictly expands the commutator
 com_term_c = powsimp(
     -I * Commutator(c, transformed).doit().expand().evaluate_with_ccr(ccr_list)
 )
@@ -110,17 +102,13 @@ com_term_q = powsimp(
     -I * Commutator(q, transformed).doit().expand().evaluate_with_ccr(ccr_list)
 )
 
-# A custom printing method I made
-# You can pass the name of the expression you're printing
-# The optional subs_list will replace symbols whenever possible according to the subs_list
-# The optional full_subs_list is required to evaluate and neglect any small terms
-# The cutoff_val specifies the smallest magnitude of a term before its removed
-# An extra latex version of each final expression is provided for any writeups!
 custom_printer(
     transformed,
     name="Hamiltonian",
     subs_list=simplify_subs_list,
 )
+
+"""
 custom_printer(
     com_term_c,
     name="Commutator with respect to c",
@@ -128,6 +116,8 @@ custom_printer(
     full_subs_list=small_subs_list,
     cutoff_val=1e-3,
 )
+"""
+
 custom_printer(
     com_term_q,
     name="Commutator with respect to q",
