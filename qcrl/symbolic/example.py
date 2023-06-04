@@ -107,7 +107,7 @@ res_with_ccr = res_expanded.evaluate_with_ccr(ccr_list)
 res_combined = powsimp(res_with_ccr)
 
 # This is what the full line would look like
-# res = powsimp(alt_fourth_order.expand().evaluate_with_ccr(ccr_list))
+# res = powsimp(non_linear_ham.expand().evaluate_with_ccr(ccr_list))
 
 # Applies a quantum_transformations method I made
 # passing only_op_terms=True means only terms with operators are kept
