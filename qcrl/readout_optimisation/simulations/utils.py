@@ -11,6 +11,7 @@ GAMMA = 1 / 39.2 * 2 * jnp.pi
 ANHARM_1 = CHI * DELTA**2 / (2 * G**2)
 ANHARM_2 = CHI * DELTA**2 / (2 * G**2 + CHI * DELTA)
 KERR = CHI * G**2 / DELTA**2  # 0.00467 * 2 * pi MHz
+RATIO = 1 / 62.5  # E_C/E_J
 
 
 def get_params():
@@ -24,6 +25,7 @@ def get_params():
         "gamma": GAMMA,
         "anharm": ANHARM_1,
         "kerr": KERR,
+        "ratio": RATIO,
     }
 
 

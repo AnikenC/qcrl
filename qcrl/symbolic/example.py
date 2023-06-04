@@ -43,7 +43,7 @@ g, delta, w_c, w_q, t, anharm, chi, kerr, ratio = symbols(
 # This is since all substitutions are made sequentially in sympy
 simplify_subs_list = [
     (anharm * g**2 / delta**2, chi / 2),
-    (chi * g**2 / delta**2, kerr),
+    (chi * g**2 / delta**2, 2 * kerr),
 ]
 
 # List of substitutions with rough values of all parameters (including the approximate maximum values

@@ -30,6 +30,7 @@ KERR = params["kerr"]
 WA = params["wr"]
 WB = params["wq"]
 DELTA = params["delta"]
+SQRT_RATIO = jnp.sqrt(2 * params["ratio"])
 WC = 0.5 * (
     WA
     + WB
@@ -89,6 +90,7 @@ args = jnp.array(
         TRANS_DRIVE_FREQ,
         COS_ANGLE,
         SIN_ANGLE,
+        SQRT_RATIO,
     ],
     dtype=complex_dtype,
 )
@@ -127,6 +129,7 @@ def vector_field(t, y, args):
         trans_drive_freq,
         cos_angle,
         sin_angle,
+        sqrt_ratio,
     ) = args
     drive_res, drive_trans = control.evaluate(t)
 
@@ -134,6 +137,18 @@ def vector_field(t, y, args):
     q_squared = jnp.absolute(q) ** 2
     c_fourth = jnp.absolute(c) ** 4
     q_fourth = jnp.absolute(q) ** 4
+
+    d_c = (
+        -1j * (wc) * c
+        - 1j * cos_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
+        - 1j * sin_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
+    )
+    d_q = (
+        -1j * (wq) * q
+        - 1j * cos_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
+        + 1j * sin_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
+    )
+
     d_c = (
         -1j * (wc - 0.9 * kerr - 0.475 * chi) * c
         - 1j * cos_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
