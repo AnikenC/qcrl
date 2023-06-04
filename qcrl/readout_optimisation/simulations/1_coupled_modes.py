@@ -58,8 +58,10 @@ WQ = 0.5 * (
     )
 )
 ANHARM = params["anharm"]
-RES_DRIVE_FREQ = WC.real - 0.9 * KERR - 0.475 * CHI
-TRANS_DRIVE_FREQ = WQ.real - 0.45 * CHI - 0.95 * ANHARM + 0.05 * KERR
+RES_DRIVE_FREQ = WC.real - 0.5 * CHI - KERR + 0.125 * SQRT_RATIO * CHI
+TRANS_DRIVE_FREQ = (
+    WQ.real - 0.5 * CHI - ANHARM + 0.25 * SQRT_RATIO * (CHI + KERR + ANHARM)
+)
 
 print(f"bare freqs, wa: {WA / (2 * jnp.pi)}, wb: {WB / (2 * jnp.pi)}")
 print(f"exact dressed freqs, wc: {WC / (2 * jnp.pi)}, wq: {WQ / (2 * jnp.pi)}")
@@ -98,8 +100,8 @@ stepsize_controller = PIDController(rtol=1e-8, atol=1e-8, jump_ts=ts)
 max_steps = int(1e6)
 
 # defining drive
-res_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 0.0 * 2 * jnp.pi  # in MHz
-trans_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 10.0 * 2 * jnp.pi
+res_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 10.0 * 2 * jnp.pi  # in MHz
+trans_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 0.0 * 2 * jnp.pi
 drive_arr = jnp.vstack((res_drive, trans_drive), dtype=complex_dtype).T
 control = LinearInterpolation(ts=ts, ys=drive_arr)
 

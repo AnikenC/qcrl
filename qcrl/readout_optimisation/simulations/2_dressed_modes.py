@@ -58,8 +58,10 @@ WQ = 0.5 * (
     )
 )
 ANHARM = params["anharm"]
-RES_DRIVE_FREQ = WC.real - 0.9 * KERR - 0.475 * CHI
-TRANS_DRIVE_FREQ = WQ.real - 0.45 * CHI - 0.95 * ANHARM + 0.05 * KERR
+RES_DRIVE_FREQ = WC.real - 0.5 * CHI - KERR + 0.125 * SQRT_RATIO * CHI
+TRANS_DRIVE_FREQ = (
+    WQ.real - 0.5 * CHI - ANHARM + 0.25 * SQRT_RATIO * (CHI + KERR + ANHARM)
+)
 COS_ANGLE = jnp.cos(0.5 * jnp.arctan(2 * G / DELTA))
 SIN_ANGLE = jnp.sin(0.5 * jnp.arctan(2 * G / DELTA))
 
@@ -111,8 +113,8 @@ stepsize_controller = PIDController(rtol=1e-8, atol=1e-8, jump_ts=ts)
 max_steps = int(1e6)
 
 # defining drive
-res_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 0.0 * 2 * jnp.pi  # in MHz
-trans_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 10.0 * 2 * jnp.pi
+res_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 10.0 * 2 * jnp.pi  # in MHz
+trans_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 0.0 * 2 * jnp.pi
 drive_arr = jnp.vstack((res_drive, trans_drive), dtype=complex_dtype).T
 control = LinearInterpolation(ts=ts, ys=drive_arr)
 
@@ -135,41 +137,54 @@ def vector_field(t, y, args):
 
     c_squared = jnp.absolute(c) ** 2
     q_squared = jnp.absolute(q) ** 2
-    c_fourth = jnp.absolute(c) ** 4
-    q_fourth = jnp.absolute(q) ** 4
 
     d_c = (
-        -1j * (wc) * c
+        -1j
+        * (
+            wc
+            - 0.5 * chi
+            - kerr
+            + 0.125 * sqrt_ratio * chi
+            + c_squared
+            * (-kerr + 0.5 * sqrt_ratio * kerr + sqrt_ratio * kerr * q_squared)
+            + q_squared
+            * (
+                -chi
+                + sqrt_ratio * kerr
+                + 0.5 * sqrt_ratio * chi
+                + 0.25 * sqrt_ratio * chi * q_squared
+            )
+        )
+        * c
         - 1j * cos_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
         - 1j * sin_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
     )
     d_q = (
-        -1j * (wq) * q
+        -1j
+        * (
+            wq
+            - 0.5 * chi
+            - anharm
+            + 0.25 * sqrt_ratio * (chi + kerr + anharm)
+            + c_squared
+            * (
+                sqrt_ratio * kerr
+                + 0.5 * sqrt_ratio * kerr * c_squared
+                + 0.5 * sqrt_ratio * chi * q_squared
+                + 0.5 * sqrt_ratio * chi
+                - chi
+            )
+            + q_squared
+            * (
+                0.5 * sqrt_ratio * anharm
+                + sqrt_ratio / 6 * anharm * q_squared
+                + 0.25 * sqrt_ratio * chi
+                - anharm
+            )
+        )
+        * q
         - 1j * cos_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
         + 1j * sin_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
-    )
-
-    d_c = (
-        -1j * (wc - 0.9 * kerr - 0.475 * chi) * c
-        - 1j * cos_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
-        - 1j * sin_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
-        - 1j * 0.2 * kerr * c_squared * q_squared * c
-        + 1j * 0.9 * kerr * c_squared * c
-        - 1j * 0.2 * kerr * q_squared * c
-        + 1j * 0.9 * chi * q_squared * c
-        - 1j * 0.05 * chi * q_fourth * c
-    )
-    d_q = (
-        -1j * (wq - 0.45 * chi - 0.95 * anharm + 0.05 * kerr) * q
-        - 1j * cos_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
-        + 1j * sin_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
-        - 1j * 0.2 * kerr * c_squared * q
-        - 1j * 0.1 * kerr * c_fourth * q
-        + 1j * 0.9 * anharm * q_squared * q
-        - 1j * anharm / 30 * q_fourth * q
-        - 1j * 0.1 * chi * c_squared * q_squared * q
-        + 1j * 0.9 * chi * c_squared * q
-        - 1j * 0.05 * chi * q_squared * q
     )
     return jnp.array([d_c, d_q], dtype=complex_dtype)
 

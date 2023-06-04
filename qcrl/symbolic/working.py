@@ -57,8 +57,8 @@ non_linear_ham = (
     * (
         q * exp(-I * w_q * t)
         + qd * exp(I * w_q * t)
-        + g / delta * c * exp(-I * w_c * t)
-        + g / delta * cd * exp(I * w_c * t)
+        # + g / delta * c * exp(-I * w_c * t)
+        # + g / delta * cd * exp(I * w_c * t)
     )
     ** 4
     + anharm
@@ -67,8 +67,8 @@ non_linear_ham = (
     * (
         q * exp(-I * w_q * t)
         + qd * exp(I * w_q * t)
-        + g / delta * c * exp(-I * w_c * t)
-        + g / delta * cd * exp(I * w_c * t)
+        # + g / delta * c * exp(-I * w_c * t)
+        # + g / delta * cd * exp(I * w_c * t)
     )
     ** 6
 )
@@ -108,7 +108,7 @@ custom_printer(
     subs_list=simplify_subs_list,
 )
 
-
+"""
 custom_printer(
     com_term_c,
     name="Commutator with respect to c",
@@ -116,6 +116,7 @@ custom_printer(
     full_subs_list=small_subs_list,
     cutoff_val=1e-3,
 )
+"""
 
 custom_printer(
     com_term_q,
