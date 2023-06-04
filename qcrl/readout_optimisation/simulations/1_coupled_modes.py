@@ -12,7 +12,7 @@ from diffrax import (
     PIDController,
 )
 
-from utils import get_params
+from utils import get_params, complex_plotter
 
 config.update("jax_enable_x64", True)
 
@@ -57,8 +57,8 @@ WQ = 0.5 * (
     )
 )
 ANHARM = params["anharm"]
-RES_DRIVE_FREQ = WC.real
-TRANS_DRIVE_FREQ = WQ.real - 0.95 * ANHARM
+RES_DRIVE_FREQ = WC.real - 0.9 * KERR - 0.475 * CHI
+TRANS_DRIVE_FREQ = WQ.real - 0.45 * CHI - 0.95 * ANHARM + 0.05 * KERR
 
 print(f"bare freqs, wa: {WA / (2 * jnp.pi)}, wb: {WB / (2 * jnp.pi)}")
 print(f"exact dressed freqs, wc: {WC / (2 * jnp.pi)}, wq: {WQ / (2 * jnp.pi)}")
@@ -169,40 +169,21 @@ jitted_func()  # run once to compile the function
 
 print(f"time taken per sim: {timeit.Timer(jitted_func).timeit(number=1000)/1000}")
 
-fig, ax = plt.subplots(4, 2)
-
 rot_res_freq = RES_DRIVE_FREQ
 rot_trans_freq = TRANS_DRIVE_FREQ
 
 rot_res = sol.ys[:, 0] * jnp.exp(1j * rot_res_freq * sol.ts)
 rot_trans = sol.ys[:, 1] * jnp.exp(1j * rot_trans_freq * sol.ts)
 
-ax[0, 0].plot(sol.ts, jnp.absolute(sol.ys[:, 0]) ** 2, label="res phot", color="red")
-ax[0, 0].legend()
-
-ax[1, 0].plot(sol.ts, jnp.absolute(sol.ys[:, 1]) ** 2, label="trans phot", color="blue")
-ax[1, 0].legend()
-
-ax[2, 0].plot(sol.ys[:, 0].real, sol.ys[:, 0].imag, label="res phase", color="orange")
-ax[2, 0].legend()
-
-ax[3, 0].plot(sol.ys[:, 1].real, sol.ys[:, 1].imag, label="trans phase", color="green")
-ax[3, 0].legend()
-
-# plotting rot frame
-
-ax[0, 1].plot(sol.ts, jnp.absolute(rot_res) ** 2, label="rot res phot", color="red")
-ax[0, 1].legend()
-
-ax[1, 1].plot(
-    sol.ts, jnp.absolute(rot_trans) ** 2, label="rot trans phot", color="blue"
+fig, ax = complex_plotter(
+    ts=sol.ts,
+    complex_1=sol.ys[:, 0],
+    complex_2=sol.ys[:, 1],
+    rot_1=rot_res,
+    rot_2=rot_trans,
+    name_1="res",
+    name_2="trans",
+    fig_name="Original Modes",
 )
-ax[1, 1].legend()
-
-ax[2, 1].plot(rot_res.real, rot_res.imag, label="rot res phase", color="orange")
-ax[2, 1].legend()
-
-ax[3, 1].plot(rot_trans.real, rot_trans.imag, label="rot trans phase", color="green")
-ax[3, 1].legend()
 
 plt.show()

@@ -1,6 +1,12 @@
+import numpy as np
+
 import sympy as sym
 from sympy.physics.quantum import Operator, Dagger
 from sympy import pprint, latex, powsimp
+
+import warnings
+
+# TO-DO, lambdify expressions before substitutions to speed up computation
 
 
 def quantum_transformations(
@@ -9,7 +15,6 @@ def quantum_transformations(
     rwa_freq=None,
     rwa_args=None,
     time_symbol=None,
-    evaluate=False,
 ):
     """
     Applies Typical Approximations and Transformations that are used in QM.
@@ -50,19 +55,43 @@ def quantum_transformations(
     return expr.copy()
 
 
-sym.Basic.quantum_transformations = lambda self, only_op_terms, rwa_freq, rwa_args, time_symbol, evaluate: quantum_transformations(
-    self, only_op_terms, rwa_freq, rwa_args, time_symbol, evaluate
+sym.Basic.quantum_transformations = lambda self, only_op_terms, rwa_freq, rwa_args, time_symbol: quantum_transformations(
+    self, only_op_terms, rwa_freq, rwa_args, time_symbol
 )
 
 
-def custom_printer(expr, name, subs_list=None):
+def custom_printer(expr, name, subs_list=None, full_subs_list=None, cutoff_val=1e-3):
+    if full_subs_list is not None:
+        subs_expr = expr.expand()
+        if not isinstance(subs_expr, sym.Add):
+            raise TypeError(
+                "the expression is not a sympy.Add method and can't be expanded to one, no terms can be neglected in this case"
+            )
+        temp_expr = sym.Abs(subs_expr.subs(full_subs_list))
+        symbols_remaining = temp_expr.free_symbols
+        if len(symbols_remaining) > 0:
+            raise ValueError(
+                f"Not enough symbol values are provided in the full_subs_list, including: {symbols_remaining}"
+            )
+        for arg in subs_expr.args:
+            subs_arg = sym.Abs(arg.subs(full_subs_list))
+            if subs_arg < cutoff_val:
+                subs_expr -= arg
     print(f"###: {name}")
     pprint(expr, use_unicode=True)
+
+    final_expr = expr
+
     if subs_list is not None:
+        symbols_expr = powsimp(expr.subs(subs_list))
+        final_expr = symbols_expr
         print("### substituted")
-        expr = powsimp(expr.subs(subs_list))
-        pprint(expr)
-        print(f"latex version (with substitutions): {latex(expr)}")
-    else:
-        print(f"latex version: {latex(expr)}")
+        pprint(symbols_expr)
+
+    if full_subs_list is not None:
+        final_expr = powsimp(subs_expr.subs(subs_list))
+        print("### neglecting small values")
+        pprint(final_expr)
+
+    print(f"latex version of final expr: {latex(final_expr)}")
     print("###")

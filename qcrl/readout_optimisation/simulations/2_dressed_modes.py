@@ -12,7 +12,7 @@ from diffrax import (
     PIDController,
 )
 
-from utils import get_params
+from utils import get_params, complex_plotter
 
 config.update("jax_enable_x64", True)
 
@@ -57,25 +57,38 @@ WQ = 0.5 * (
     )
 )
 ANHARM = params["anharm"]
-RES_DRIVE_FREQ = WC.real
-TRANS_DRIVE_FREQ = WQ.real - 0.95 * ANHARM
+RES_DRIVE_FREQ = WC.real - 0.9 * KERR - 0.475 * CHI
+TRANS_DRIVE_FREQ = WQ.real - 0.45 * CHI - 0.95 * ANHARM + 0.05 * KERR
+COS_ANGLE = jnp.cos(0.5 * jnp.arctan(2 * G / DELTA))
+SIN_ANGLE = jnp.sin(0.5 * jnp.arctan(2 * G / DELTA))
 
 print(f"bare freqs, wa: {WA / (2 * jnp.pi)}, wb: {WB / (2 * jnp.pi)}")
 print(f"exact dressed freqs, wc: {WC / (2 * jnp.pi)}, wq: {WQ / (2 * jnp.pi)}")
 print(
     f"rough dressed freqs, wc: {(WA + G**2/DELTA - 1j * KAPPA / 2) / (2 * jnp.pi)}, wq: {(WB - G**2/DELTA - 1j * GAMMA / 2) / (2 * jnp.pi)}"
 )
+print(f"rough cos: {1.}, sin: {G / DELTA}, exact cos: {COS_ANGLE}, sin: {SIN_ANGLE}")
+
+og_sin = 0.052233502538071054
+current_sin = 0.05202123087967161
+
+diff_in_chi = ANHARM / 2 / jnp.pi * (og_sin**2 - current_sin**2)
+diff_in_kerr = ANHARM / 2 / jnp.pi * (og_sin**4 - current_sin**4)
+
+print(f"diff_in_chi in MHz: {diff_in_chi}")
+print(f"diff_in_kerr in MHz: {diff_in_kerr}")
 
 args = jnp.array(
     [
-        0.5 * KAPPA,
-        0.5 * GAMMA,
-        G,
+        CHI,
+        KERR,
         ANHARM,
-        WA,
-        WB,
+        WC,
+        WQ,
         RES_DRIVE_FREQ,
         TRANS_DRIVE_FREQ,
+        COS_ANGLE,
+        SIN_ANGLE,
     ],
     dtype=complex_dtype,
 )
@@ -103,34 +116,47 @@ control = LinearInterpolation(ts=ts, ys=drive_arr)
 
 
 def vector_field(t, y, args):
-    a, b = y
+    c, q = y
     (
-        kappa_half,
-        gamma_half,
-        g,
+        chi,
+        kerr,
         anharm,
-        wa,
-        wb,
+        wc,
+        wq,
         res_drive_freq,
         trans_drive_freq,
+        cos_angle,
+        sin_angle,
     ) = args
     drive_res, drive_trans = control.evaluate(t)
 
-    d_a = (
-        -kappa_half * a
-        - 1j * wa * a
-        - 1j * g * b
-        - 1j * drive_res * jnp.exp(-1j * res_drive_freq * t)
+    c_squared = jnp.absolute(c) ** 2
+    q_squared = jnp.absolute(q) ** 2
+    c_fourth = jnp.absolute(c) ** 4
+    q_fourth = jnp.absolute(q) ** 4
+    d_c = (
+        -1j * (wc - 0.9 * kerr - 0.475 * chi) * c
+        - 1j * cos_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
+        - 1j * sin_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
+        - 1j * 0.2 * kerr * c_squared * q_squared * c
+        + 1j * 0.9 * kerr * c_squared * c
+        - 1j * 0.2 * kerr * q_squared * c
+        + 1j * 0.9 * chi * q_squared * c
+        - 1j * 0.05 * chi * q_fourth * c
     )
-    d_b = (
-        -gamma_half * b
-        - 1j * (wb - 0.95 * anharm) * b
-        - 1j * g * a
-        - 1j * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
-        + 1j * 0.9 * anharm * jnp.absolute(b) ** 2 * b
-        - 1j * anharm / 30 * jnp.absolute(b) ** 4 * b
+    d_q = (
+        -1j * (wq - 0.45 * chi - 0.95 * anharm + 0.05 * kerr) * q
+        - 1j * cos_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
+        + 1j * sin_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
+        - 1j * 0.2 * kerr * c_squared * q
+        - 1j * 0.1 * kerr * c_fourth * q
+        + 1j * 0.9 * anharm * q_squared * q
+        - 1j * anharm / 30 * q_fourth * q
+        - 1j * 0.1 * chi * c_squared * q_squared * q
+        + 1j * 0.9 * chi * c_squared * q
+        - 1j * 0.05 * chi * q_squared * q
     )
-    return jnp.array([d_a, d_b], dtype=complex_dtype)
+    return jnp.array([d_c, d_q], dtype=complex_dtype)
 
 
 ode_term = ODETerm(vector_field)
@@ -169,7 +195,6 @@ jitted_func()  # run once to compile the function
 
 print(f"time taken per sim: {timeit.Timer(jitted_func).timeit(number=1000)/1000}")
 
-fig, ax = plt.subplots(4, 2)
 
 rot_res_freq = RES_DRIVE_FREQ
 rot_trans_freq = TRANS_DRIVE_FREQ
@@ -177,32 +202,32 @@ rot_trans_freq = TRANS_DRIVE_FREQ
 rot_res = sol.ys[:, 0] * jnp.exp(1j * rot_res_freq * sol.ts)
 rot_trans = sol.ys[:, 1] * jnp.exp(1j * rot_trans_freq * sol.ts)
 
-ax[0, 0].plot(sol.ts, jnp.absolute(sol.ys[:, 0]) ** 2, label="res phot", color="red")
-ax[0, 0].legend()
+og_res = COS_ANGLE * sol.ys[:, 0] - SIN_ANGLE * sol.ys[:, 1]
+og_trans = SIN_ANGLE * sol.ys[:, 0] + COS_ANGLE * sol.ys[:, 1]
 
-ax[1, 0].plot(sol.ts, jnp.absolute(sol.ys[:, 1]) ** 2, label="trans phot", color="blue")
-ax[1, 0].legend()
+rot_og_res = og_res * jnp.exp(1j * rot_res_freq * sol.ts)
+rot_og_trans = og_trans * jnp.exp(1j * rot_trans_freq * sol.ts)
 
-ax[2, 0].plot(sol.ys[:, 0].real, sol.ys[:, 0].imag, label="res phase", color="orange")
-ax[2, 0].legend()
-
-ax[3, 0].plot(sol.ys[:, 1].real, sol.ys[:, 1].imag, label="trans phase", color="green")
-ax[3, 0].legend()
-
-# plotting rot frame
-
-ax[0, 1].plot(sol.ts, jnp.absolute(rot_res) ** 2, label="rot res phot", color="red")
-ax[0, 1].legend()
-
-ax[1, 1].plot(
-    sol.ts, jnp.absolute(rot_trans) ** 2, label="rot trans phot", color="blue"
+fig1, ax1 = complex_plotter(
+    ts=sol.ts,
+    complex_1=sol.ys[:, 0],
+    complex_2=sol.ys[:, 1],
+    rot_1=rot_res,
+    rot_2=rot_trans,
+    name_1="res",
+    name_2="trans",
+    fig_name="Dressed Modes",
 )
-ax[1, 1].legend()
 
-ax[2, 1].plot(rot_res.real, rot_res.imag, label="rot res phase", color="orange")
-ax[2, 1].legend()
-
-ax[3, 1].plot(rot_trans.real, rot_trans.imag, label="rot trans phase", color="green")
-ax[3, 1].legend()
+fig2, ax2 = complex_plotter(
+    ts=sol.ts,
+    complex_1=og_res,
+    complex_2=og_trans,
+    rot_1=rot_og_res,
+    rot_2=rot_og_trans,
+    name_1="res",
+    name_2="trans",
+    fig_name="Original Modes from Dressed",
+)
 
 plt.show()

@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
 
 KAPPA = 5.35 * 2 * jnp.pi
 CHI = 0.16 * KAPPA * 2.0  # extra 2. factor in case of alternate cross-Kerr definition
@@ -24,6 +25,47 @@ def get_params():
         "anharm": ANHARM_1,
         "kerr": KERR,
     }
+
+
+def complex_plotter(ts, complex_1, complex_2, rot_1, rot_2, name_1, name_2, fig_name):
+    fig, ax = plt.subplots(4, 2, num=fig_name)
+    ax[0, 0].plot(
+        ts, jnp.absolute(complex_1) ** 2, label=f"{name_1} photons", color="red"
+    )
+    ax[0, 0].legend()
+
+    ax[1, 0].plot(
+        ts, jnp.absolute(complex_2) ** 2, label=f"{name_2} photons", color="blue"
+    )
+    ax[1, 0].legend()
+
+    ax[2, 0].plot(
+        complex_1.real, complex_1.imag, label=f"{name_1} phase", color="orange"
+    )
+    ax[2, 0].legend()
+
+    ax[3, 0].plot(
+        complex_2.real, complex_2.imag, label=f"{name_2} phase", color="green"
+    )
+    ax[3, 0].legend()
+
+    ax[0, 1].plot(
+        ts, jnp.absolute(rot_1) ** 2, label=f"rot {name_1} photons", color="red"
+    )
+    ax[0, 1].legend()
+
+    ax[1, 1].plot(
+        ts, jnp.absolute(rot_2) ** 2, label=f"rot {name_2} photons", color="blue"
+    )
+    ax[1, 1].legend()
+
+    ax[2, 1].plot(rot_1.real, rot_1.imag, label=f"rot {name_1} phase", color="orange")
+    ax[2, 1].legend()
+
+    ax[3, 1].plot(rot_2.real, rot_2.imag, label=f"rot {name_2} phase", color="green")
+    ax[3, 1].legend()
+
+    return fig, ax
 
 
 """
