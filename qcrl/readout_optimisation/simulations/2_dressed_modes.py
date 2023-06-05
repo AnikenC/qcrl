@@ -105,7 +105,7 @@ ns_per_sample = 4
 samples = int(1000.0 / ns_per_sample * (t1 - t0))
 ts = jnp.linspace(t0, t1, samples + 1, dtype=float_dtype)
 
-y0 = jnp.array([0.0 + 1j * 0.0, 0.0 + 1j * 0.0], dtype=complex_dtype)
+y0 = jnp.array([0.0 + 1j * 0.0, 1.0 + 1j * 0.0], dtype=complex_dtype)
 
 solver = Tsit5()
 saveat = SaveAt(ts=ts)
@@ -113,7 +113,7 @@ stepsize_controller = PIDController(rtol=1e-8, atol=1e-8, jump_ts=ts)
 max_steps = int(1e6)
 
 # defining drive
-res_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 10.0 * 2 * jnp.pi  # in MHz
+res_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 5.0 * 2 * jnp.pi  # in MHz
 trans_drive = jnp.zeros_like(ts, dtype=complex_dtype) + 0.0 * 2 * jnp.pi
 drive_arr = jnp.vstack((res_drive, trans_drive), dtype=complex_dtype).T
 control = LinearInterpolation(ts=ts, ys=drive_arr)
@@ -248,7 +248,7 @@ fig1, ax1 = complex_plotter(
     name_2="trans",
     fig_name="Dressed Modes",
 )
-
+"""
 fig2, ax2 = complex_plotter(
     ts=sol.ts,
     complex_1=og_res,
@@ -259,5 +259,6 @@ fig2, ax2 = complex_plotter(
     name_2="trans",
     fig_name="Original Modes from Dressed",
 )
+"""
 
 plt.show()
