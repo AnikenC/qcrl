@@ -12,3 +12,6 @@ torchinfo
 tqdm
 sympy
 jaxlib
+complexPyTorch
+torchvision
+pytorch-complex

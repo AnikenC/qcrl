@@ -1,4 +1,7 @@
-import timeit
+import warnings
+
+warnings.filterwarnings("ignore")
+
 import matplotlib.pyplot as plt
 
 import jax.numpy as jnp
@@ -12,7 +15,7 @@ from diffrax import (
     PIDController,
 )
 
-from utils import get_params, complex_plotter
+from utils import get_params, complex_plotter, timer_func
 
 config.update("jax_enable_x64", True)
 
@@ -65,12 +68,17 @@ TRANS_DRIVE_FREQ = (
 COS_ANGLE = jnp.cos(0.5 * jnp.arctan(2 * G / DELTA))
 SIN_ANGLE = jnp.sin(0.5 * jnp.arctan(2 * G / DELTA))
 
+WC_EFF = WC - 0.5 * CHI - KERR + 0.125 * SQRT_RATIO * CHI
+WQ_EFF = WQ - 0.5 * CHI - ANHARM + 0.25 * SQRT_RATIO * (CHI + KERR + ANHARM)
+
 print(f"bare freqs, wa: {WA / (2 * jnp.pi)}, wb: {WB / (2 * jnp.pi)}")
 print(f"exact dressed freqs, wc: {WC / (2 * jnp.pi)}, wq: {WQ / (2 * jnp.pi)}")
 print(
     f"rough dressed freqs, wc: {(WA + G**2/DELTA - 1j * KAPPA / 2) / (2 * jnp.pi)}, wq: {(WB - G**2/DELTA - 1j * GAMMA / 2) / (2 * jnp.pi)}"
 )
 print(f"rough cos: {1.}, sin: {G / DELTA}, exact cos: {COS_ANGLE}, sin: {SIN_ANGLE}")
+
+print(f"wc eff: {WC_EFF}, wq eff: {WQ_EFF}")
 
 og_sin = 0.052233502538071054
 current_sin = 0.05202123087967161
@@ -105,7 +113,8 @@ ns_per_sample = 4
 samples = int(1000.0 / ns_per_sample * (t1 - t0))
 ts = jnp.linspace(t0, t1, samples + 1, dtype=float_dtype)
 
-y0 = jnp.array([0.0 + 1j * 0.0, 1.0 + 1j * 0.0], dtype=complex_dtype)
+y0 = jnp.array([0.0 + 1j * 0.0, 0.0 + 1j * 0.0], dtype=complex_dtype)
+y0_e = jnp.array([0.0 + 1j * 0.0, 1.0 + 1j * 0.0], dtype=complex_dtype)
 
 solver = Tsit5()
 saveat = SaveAt(ts=ts)
@@ -189,6 +198,76 @@ def vector_field(t, y, args):
     return jnp.array([d_c, d_q], dtype=complex_dtype)
 
 
+def rot_vector_field(t, y, args):
+    c, q = y
+    (
+        chi,
+        kerr,
+        anharm,
+        wc,
+        wq,
+        res_drive_freq,
+        trans_drive_freq,
+        cos_angle,
+        sin_angle,
+        sqrt_ratio,
+    ) = args
+    drive_res, drive_trans = control.evaluate(t)
+
+    c_squared = jnp.absolute(c) ** 2
+    q_squared = jnp.absolute(q) ** 2
+
+    d_c = (
+        -1j
+        * (
+            wc
+            - 0.5 * chi
+            - kerr
+            + 0.125 * sqrt_ratio * chi
+            + c_squared
+            * (-kerr + 0.5 * sqrt_ratio * kerr + sqrt_ratio * kerr * q_squared)
+            + q_squared
+            * (
+                -chi
+                + sqrt_ratio * kerr
+                + 0.5 * sqrt_ratio * chi
+                + 0.25 * sqrt_ratio * chi * q_squared
+            )
+        )
+        * c
+        - 1j * cos_angle * drive_res * jnp.exp(-1j * (res_drive_freq - wc) * t)
+        - 1j * sin_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
+    )
+    d_q = (
+        -1j
+        * (
+            wq
+            - 0.5 * chi
+            - anharm
+            + 0.25 * sqrt_ratio * (chi + kerr + anharm)
+            + c_squared
+            * (
+                sqrt_ratio * kerr
+                + 0.5 * sqrt_ratio * kerr * c_squared
+                + 0.5 * sqrt_ratio * chi * q_squared
+                + 0.5 * sqrt_ratio * chi
+                - chi
+            )
+            + q_squared
+            * (
+                0.5 * sqrt_ratio * anharm
+                + sqrt_ratio / 6 * anharm * q_squared
+                + 0.25 * sqrt_ratio * chi
+                - anharm
+            )
+        )
+        * q
+        - 1j * cos_angle * drive_trans * jnp.exp(-1j * trans_drive_freq * t)
+        + 1j * sin_angle * drive_res * jnp.exp(-1j * res_drive_freq * t)
+    )
+    return jnp.array([d_c, d_q], dtype=complex_dtype)
+
+
 ode_term = ODETerm(vector_field)
 
 sol = diffeqsolve(
@@ -204,9 +283,22 @@ sol = diffeqsolve(
     max_steps=max_steps,
 )
 
+sol_e = diffeqsolve(
+    terms=ode_term,
+    solver=solver,
+    t0=t0,
+    t1=t1,
+    dt0=dt0,
+    y0=y0_e,
+    args=args,
+    saveat=saveat,
+    stepsize_controller=stepsize_controller,
+    max_steps=max_steps,
+)
+
 
 def time_func():
-    _ = diffeqsolve(
+    res_g = diffeqsolve(
         terms=ode_term,
         solver=solver,
         t0=t0,
@@ -219,46 +311,69 @@ def time_func():
         max_steps=max_steps,
     )
 
+    res_e = diffeqsolve(
+        terms=ode_term,
+        solver=solver,
+        t0=t0,
+        t1=t1,
+        dt0=dt0,
+        y0=y0_e,
+        args=args,
+        saveat=saveat,
+        stepsize_controller=stepsize_controller,
+        max_steps=max_steps,
+    )
+    return res_g, res_e
+
 
 jitted_func = jit(time_func)
-jitted_func()  # run once to compile the function
+res_ge = timer_func(
+    jitted_func,
+    num_reps=10,
+    name="time taken for g + e",
+    func_args=None,
+    block=True,
+    trials_in_each=1,
+    units=1e-6,
+)
 
-print(f"time taken per sim: {timeit.Timer(jitted_func).timeit(number=1000)/1000}")
-
+res_g, res_e = res_ge
 
 rot_res_freq = RES_DRIVE_FREQ
 rot_trans_freq = TRANS_DRIVE_FREQ
 
-rot_res = sol.ys[:, 0] * jnp.exp(1j * rot_res_freq * sol.ts)
-rot_trans = sol.ys[:, 1] * jnp.exp(1j * rot_trans_freq * sol.ts)
+plot_res_g = res_g.ys[:, 0]  # sol.ys[:, 0]
+plot_res_e = res_e.ys[:, 0]  # sol_e.ys[:, 0]
+plot_trans_g = res_g.ys[:, 1]  # sol.ys[:, 1]
+plot_trans_e = res_e.ys[:, 1]  # sol_e.ys[:, 1]
 
-og_res = COS_ANGLE * sol.ys[:, 0] - SIN_ANGLE * sol.ys[:, 1]
-og_trans = SIN_ANGLE * sol.ys[:, 0] + COS_ANGLE * sol.ys[:, 1]
+rot_res = plot_res_g * jnp.exp(1j * rot_res_freq * sol.ts)
+rot_trans = plot_trans_g * jnp.exp(1j * rot_trans_freq * sol.ts)
 
-rot_og_res = og_res * jnp.exp(1j * rot_res_freq * sol.ts)
-rot_og_trans = og_trans * jnp.exp(1j * rot_trans_freq * sol.ts)
+rot_res_e = plot_res_e * jnp.exp(1j * rot_res_freq * sol_e.ts)
+rot_trans_e = plot_trans_e * jnp.exp(1j * rot_trans_freq * sol_e.ts)
 
 fig1, ax1 = complex_plotter(
     ts=sol.ts,
-    complex_1=sol.ys[:, 0],
-    complex_2=sol.ys[:, 1],
+    complex_1=plot_res_g,
+    complex_2=plot_trans_g,
     rot_1=rot_res,
     rot_2=rot_trans,
     name_1="res",
     name_2="trans",
-    fig_name="Dressed Modes",
+    fig_name="Ground Dressed",
 )
-"""
+
 fig2, ax2 = complex_plotter(
     ts=sol.ts,
-    complex_1=og_res,
-    complex_2=og_trans,
-    rot_1=rot_og_res,
-    rot_2=rot_og_trans,
+    complex_1=plot_res_e,
+    complex_2=plot_trans_e,
+    rot_1=rot_res_e,
+    rot_2=rot_trans_e,
     name_1="res",
     name_2="trans",
-    fig_name="Original Modes from Dressed",
+    fig_name="Excited Dressed",
 )
-"""
+
 
 plt.show()
