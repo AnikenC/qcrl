@@ -1,0 +1,29 @@
+2023-06-16 17:32:31,082 INFO    MainThread:33465 [wandb_setup.py:_flush():76] Current SDK version is 0.15.3
+2023-06-16 17:32:31,082 INFO    MainThread:33465 [wandb_setup.py:_flush():76] Configure stats pid to 33465
+2023-06-16 17:32:31,082 INFO    MainThread:33465 [wandb_setup.py:_flush():76] Loading settings from /Users/chatt07/.config/wandb/settings
+2023-06-16 17:32:31,082 INFO    MainThread:33465 [wandb_setup.py:_flush():76] Loading settings from /Users/chatt07/Desktop/shining_env/QCRL/qcrl/wandb/settings
+2023-06-16 17:32:31,082 INFO    MainThread:33465 [wandb_setup.py:_flush():76] Loading settings from environment variables: {}
+2023-06-16 17:32:31,082 INFO    MainThread:33465 [wandb_setup.py:_flush():76] Applying setup settings: {'_disable_service': False}
+2023-06-16 17:32:31,083 INFO    MainThread:33465 [wandb_setup.py:_flush():76] Inferring run settings from compute environment: {'program_relpath': 'qcrl/ppo.py', 'program': '/Users/chatt07/Desktop/shining_env/QCRL/qcrl/ppo.py'}
+2023-06-16 17:32:31,083 INFO    MainThread:33465 [wandb_init.py:_log_setup():507] Logging user logs to /Users/chatt07/Desktop/shining_env/QCRL/qcrl/wandb/run-20230616_173231-9t2lyc5l/logs/debug.log
+2023-06-16 17:32:31,083 INFO    MainThread:33465 [wandb_init.py:_log_setup():508] Logging internal logs to /Users/chatt07/Desktop/shining_env/QCRL/qcrl/wandb/run-20230616_173231-9t2lyc5l/logs/debug-internal.log
+2023-06-16 17:32:31,084 INFO    MainThread:33465 [wandb_init.py:init():547] calling init triggers
+2023-06-16 17:32:31,084 INFO    MainThread:33465 [wandb_init.py:init():554] wandb.init called with sweep_config: {}
+config: {'exp_name': 'Torched_PPO', 'seed': 1, 'torch_deterministic': True, 'cuda': True, 'track': True, 'wandb_project_name': 'GateCalibration', 'wandb_entity': 'quantumcontrolwithrl', 'print_debug': False, 'env_id': 'arthur_env', 'num_envs': 1, 'num_updates': 4000, 'learning_rate': 0.0003, 'batch_size': 100, 'clip_epsilon': 0.1, 'grad_clip': 0.5, 'vf_coeff': 0.5, 'ent_coeff': 0.01, 'anneal_lr': False}
+2023-06-16 17:32:31,084 INFO    MainThread:33465 [wandb_init.py:init():596] starting backend
+2023-06-16 17:32:31,085 INFO    MainThread:33465 [wandb_init.py:init():600] setting up manager
+2023-06-16 17:32:31,096 INFO    MainThread:33465 [backend.py:_multiprocessing_setup():106] multiprocessing start_methods=spawn,fork,forkserver, using: spawn
+2023-06-16 17:32:31,109 INFO    MainThread:33465 [wandb_init.py:init():606] backend started and connected
+2023-06-16 17:32:31,133 INFO    MainThread:33465 [wandb_init.py:init():700] updated telemetry
+2023-06-16 17:32:31,167 INFO    MainThread:33465 [wandb_init.py:init():737] communicating run to backend with 60.0 second timeout
+2023-06-16 17:32:31,844 INFO    MainThread:33465 [wandb_run.py:_on_init():2177] communicating current version
+2023-06-16 17:32:31,900 INFO    MainThread:33465 [wandb_run.py:_on_init():2186] got version response upgrade_message: "wandb version 0.15.4 is available!  To upgrade, please run:\n $ pip install wandb --upgrade"
+
+2023-06-16 17:32:31,901 INFO    MainThread:33465 [wandb_init.py:init():787] starting run threads in backend
+2023-06-16 17:32:32,117 INFO    MainThread:33465 [wandb_run.py:_console_start():2158] atexit reg
+2023-06-16 17:32:32,117 INFO    MainThread:33465 [wandb_run.py:_redirect():2013] redirect: SettingsConsole.WRAP_RAW
+2023-06-16 17:32:32,118 INFO    MainThread:33465 [wandb_run.py:_redirect():2078] Wrapping output streams.
+2023-06-16 17:32:32,118 INFO    MainThread:33465 [wandb_run.py:_redirect():2103] Redirects installed.
+2023-06-16 17:32:32,119 INFO    MainThread:33465 [wandb_init.py:init():829] run started, returning control to user process
+2023-06-16 17:32:32,120 INFO    MainThread:33465 [wandb_run.py:_tensorboard_callback():1433] tensorboard callback: runs/arthur_env__Torched_PPO__1__1686907949, True
+2023-06-16 17:32:58,967 WARNING MsgRouterThr:33465 [router.py:message_loop():77] message_loop has been closed

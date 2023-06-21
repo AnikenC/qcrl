@@ -1,0 +1,417 @@
+diff --git a/qcrl/ppo.py b/qcrl/ppo.py
+index a04c443..8d8a940 100644
+--- a/qcrl/ppo.py
++++ b/qcrl/ppo.py
+@@ -5,6 +5,7 @@ import random
+ from tqdm import tqdm
+ from distutils.util import strtobool
+ 
++from jax import config
+ import numpy as np
+ 
+ import torch
+@@ -16,7 +17,9 @@ from torch.utils.tensorboard import SummaryWriter
+ from torchinfo import summary
+ import wandb
+ 
+-from .readout_optimisation.rl_envs.gymnasium_env import ReadoutEnv
++from readout_optimisation.rl_envs.resonator_environment import ResonatorEnv
++
++config.update("jax_enable_x64", True)
+ 
+ # For debugging
+ # torch.autograd.set_detect_anomaly(True)
+@@ -39,7 +42,7 @@ def parse_args():
+         help="if toggled, cuda will be enabled by default")
+     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+         help="if toggled, this experiment will be tracked with Weights and Biases")
+-    parser.add_argument("--wandb-project-name", type=str, default="GateCalibration",
++    parser.add_argument("--wandb-project-name", type=str, default="ReadoutOptimisation",
+         help="the wandb's project name")
+     parser.add_argument("--wandb-entity", type=str, default="quantumcontrolwithrl",
+         help="the entity (team) of wandb's project")
+@@ -51,24 +54,29 @@ def parse_args():
+         help="the id of the environment")
+     parser.add_argument("--num-envs", type=int, default=1, nargs="?", const=True,\
+         help="number of environments for parallel processing")
+-    parser.add_argument("--num-updates", type=int, default=4000, nargs="?", const=True,
++    parser.add_argument("--num-updates", type=int, default=10000, nargs="?", const=True,
+         help="total timesteps of the experiments")
++    parser.add_argument("--update-epochs", type=int, default=3, nargs="?", const=True,
++        help="number of epochs before a policy update")
++    parser.add_argument("--num-minibatches", type=int, default=32, nargs="?", const=True,
++        help="number of minibatches in one batch")
+     parser.add_argument("--learning-rate", type=float, default=0.0003, nargs="?", const=True,
+         help="the learning rate of the optimizer")
+-    parser.add_argument("--batch-size", type=int, default=100, nargs="?", const=True,\
++    parser.add_argument("--batch-size", type=int, default=512, nargs="?", const=True,\
+         help="batch size for each update")
+     parser.add_argument("--clip-epsilon", type=float, default=0.1, nargs="?", const=True,\
+         help="clipping epsilon")
+     parser.add_argument("--grad-clip", type=float, default=0.5, nargs="?", const=True,\
+         help="gradient clip for optimizer updates")
+-    parser.add_argument("--vf-coeff", type=float, default=0.5, nargs="?", const=True,\
++    parser.add_argument("--vf-coef", type=float, default=0.5, nargs="?", const=True,\
+         help="coeff for value loss contribution to total loss")
+-    parser.add_argument("--ent-coeff", type=float, default=0.01, nargs="?", const=True,\
++    parser.add_argument("--ent-coef", type=float, default=0.01, nargs="?", const=True,\
+         help="entropy coefficient to encourage exploration")
+     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,\
+         help="whether to anneal the learning rate over the whole run")
+     
+     args = parser.parse_args()
++    args.minibatch_size = int(args.batch_size // args.num_minibatches)
+     # fmt: on
+     return args
+ 
+@@ -138,7 +146,7 @@ if __name__ == "__main__":
+     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+ 
+     assert args.env_id == "arthur_env", f"env_id must be arthur_env"
+-    env = ReadoutEnv()
++    env = ResonatorEnv()
+     next_obs, info = env.reset(seed=args.seed)
+ 
+     model = CombinedAgent(env).to(device)
+@@ -174,34 +182,65 @@ if __name__ == "__main__":
+             temp_obs, reward, terminated, truncated, info = env.step(
+                 action.cpu().numpy()
+             )
+-            rewards = torch.tensor(reward).to(device)
++            torch_obs = torch.tensor(temp_obs, dtype=torch.float32).to(device)
++            rewards = torch.tensor(reward, dtype=torch.float32).to(device)
+ 
+             advantages = rewards - critic_value
+ 
+-        new_mean, new_sigma, new_value = model(train_obs)
+-        new_logprob = Normal(new_mean, new_sigma).log_prob(action).sum(1)
+-        log_ratio = new_logprob - logprob
+-        ratio = log_ratio.exp()
++        # flatten the batch
++        b_obs = torch_obs.reshape((-1,) + env.observation_space.shape)
++        b_logprobs = logprob.reshape(-1)
++        b_actions = action.reshape((-1,) + env.action_space.shape)
++        b_advantages = advantages.reshape(-1)
++        b_returns = rewards.reshape(-1)
+ 
+-        # Policy loss
+-        pg_loss1 = -advantages * ratio
+-        pg_loss2 = -advantages * torch.clamp(
+-            ratio, 1 - args.clip_epsilon, 1 + args.clip_epsilon
+-        )
+-        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
++        b_inds = np.arange(args.batch_size)
++        clip_fracs = []
++
++        for epoch in range(args.update_epochs):
++            np.random.shuffle(b_inds)
++            for start in range(0, args.batch_size, args.minibatch_size):
++                end = start + args.minibatch_size
++                mb_inds = b_inds[start:end]
++
++                new_mean, new_sigma, new_value = model(b_obs[mb_inds])
++                probs = Normal(new_mean, new_sigma)
++
++                entropy = probs.entropy().sum(1)
++                new_logprob = probs.log_prob(b_actions[mb_inds]).sum(1)
++
++                logratio = new_logprob - b_logprobs[mb_inds]
++                ratio = logratio.exp()
++
++                mb_advantage = b_advantages[mb_inds]
+ 
+-        v_loss = ((new_value - rewards) ** 2).mean()
+-        loss = pg_loss + v_loss * args.vf_coeff
++                pg_loss1 = -mb_advantage * ratio
++                pg_loss2 = -mb_advantage * torch.clamp(
++                    ratio, 1 - args.clip_epsilon, 1 + args.clip_epsilon
++                )
++                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+ 
+-        optimizer.zero_grad()
+-        loss.backward()
+-        nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+-        optimizer.step()
++                new_value = new_value.view(-1)
++                v_loss = 0.5 * ((new_value - rewards[mb_inds]) ** 2).mean()
++
++                entropy_loss = entropy.mean()
++
++                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
++
++                optimizer.zero_grad()
++                loss.backward()
++                nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
++                optimizer.step()
++
++        batch_mean_reward = np.asarray(info["mean reward"])
++        batch_mean_max_photon = np.asarray(info["mean max photon"])
++        batch_mean_max_separation = np.asarray(info["mean max separation"])
+ 
+         if args.track:
+-            writer.add_scalar("charts/mean_reward", info["mean rewards"], update)
++            writer.add_scalar("charts/mean_reward", batch_mean_reward, update)
++            writer.add_scalar("charts/mean_max_photon", batch_mean_max_photon, update)
+             writer.add_scalar(
+-                "charts/average_fidelity", info["average fidelity"], update
++                "charts/mean_max_separation", batch_mean_max_separation, update
+             )
+             writer.add_scalar(
+                 "charts/advantage", advantages.detach().mean().numpy(), update
+@@ -222,10 +261,20 @@ if __name__ == "__main__":
+             writer.add_scalar("losses/total_loss", loss.detach().mean().numpy(), update)
+ 
+         if args.print_debug:
++            max_reward_obtained = info["max reward"]
++            separation_at_max_reward = info["separation at max reward"]
++            photon_at_max_reward = info["photon at max reward"]
+             print("\n Update", update)
+-            print("Average reward", info["mean rewards"])
+-            print("Average Gate Fidelity:", info["average fidelity"])
+-            print("Max Reward", info["max reward"])
+-            print("Max Fidelity", info["max fidelity"])
++            print("Mean Batch Reward", batch_mean_reward)
++            print("Mean Batch Max Separation", batch_mean_max_separation)
++            print("Mean Batch Max Photon", batch_mean_max_photon)
++            print("Max Reward Obtained", max_reward_obtained)
++            print(f"Separation at Max Reward: {separation_at_max_reward}")
++            print(f"Photon at Max Reward: {photon_at_max_reward}")
++
++        if update % 100 == 0:
++            action_at_max_reward = info["action at max reward"]
++            print(f"Action at max reward: {action_at_max_reward}")
+ 
+-    writer.close()
++    if args.track:
++        writer.close()
+diff --git a/qcrl/readout_optimisation/rl_envs/temp.py b/qcrl/readout_optimisation/rl_envs/temp.py
+index b74ccf8..8861c16 100644
+--- a/qcrl/readout_optimisation/rl_envs/temp.py
++++ b/qcrl/readout_optimisation/rl_envs/temp.py
+@@ -1,9 +1,47 @@
+-import numpy as np
+-from gymnasium_env import ReadoutEnv
+-
+-env = ReadoutEnv()
+-obs, info = env.reset()
+-action = np.arange(0.0, env.action_space.shape[0], 1)
+-print(action)
+-next_obs, reward, done, _, info = env.step(action)
+-print(next_obs)
++from jax import config, jit
++import jax.numpy as jnp
++from resonator_environment import ResonatorEnv
++
++config.update("jax_enable_x64", True)
++
++float_dtype = jnp.float64
++
++T0 = 0.0
++T1 = 2.0
++NUM_ACTION = 51
++TS_ACTION = jnp.linspace(T0, T1, NUM_ACTION, dtype=float_dtype)
++
++RES_DRIVE_AMP = 0.5
++GAUSSIAN_MEAN = 0.5 * T1
++GAUSSIAN_STD = 0.25 * T1
++
++BATCH_SIZE = 512
++
++single_gaussian_complex = jnp.asarray(
++    (
++        RES_DRIVE_AMP
++        * jnp.exp(-((TS_ACTION - GAUSSIAN_MEAN) ** 2) / (2 * GAUSSIAN_STD**2))
++    ),
++    dtype=float_dtype,
++)
++
++single_gaussian_real = single_gaussian_complex.real
++single_gaussian_imag = single_gaussian_complex.imag
++single_res_state = jnp.array([0.0, 0.0], dtype=float_dtype)
++
++single_composite_action = jnp.concatenate(
++    (single_gaussian_real, single_gaussian_imag, single_res_state)
++).reshape(1, 2 * (NUM_ACTION + 1))
++
++batched_composite_action = single_composite_action
++
++for i in range(BATCH_SIZE - 1):
++    batched_composite_action = jnp.concatenate(
++        (batched_composite_action, single_composite_action), dtype=float_dtype
++    )
++
++
++env = ResonatorEnv()
++observation, info = env.reset()
++obs, reward, done, _, info = env.step(batched_composite_action)
++print(info)
+diff --git a/qcrl/readout_optimisation/simulations/C_states_sim.py b/qcrl/readout_optimisation/simulations/C_states_sim.py
+index 33f5126..9360f2f 100644
+--- a/qcrl/readout_optimisation/simulations/C_states_sim.py
++++ b/qcrl/readout_optimisation/simulations/C_states_sim.py
+@@ -69,7 +69,7 @@ if __name__ == "__main__":
+     res_drive_amp = 2.5  # * t_pi
+     trans_drive_amp = 0 * res_drive_amp * SIN_ANGLE
+ 
+-    RES_COMPLEX_STATE = -1j * 2.7
++    RES_COMPLEX_STATE = -1j * 2.24
+     res_state_imag = RES_COMPLEX_STATE.imag
+ 
+     drive_on_res_gaussian = jnp.asarray(
+@@ -300,7 +300,7 @@ if __name__ == "__main__":
+     )
+ 
+     fig, ax = plt.subplots(1, num=f"C Separation, Init State: {RES_COMPLEX_STATE}")
+-    ax.plot(TS_SIM, separation, label="separation", color="blue")
++    ax.plot(TS_SIM, separation, label=f"max separation: {max_separation}", color="blue")
+     ax.plot(
+         time_of_max_sep,
+         max_separation,
+diff --git a/qcrl/readout_optimisation/simulations/__pycache__/updated_utils.cpython-39.pyc b/qcrl/readout_optimisation/simulations/__pycache__/updated_utils.cpython-39.pyc
+index 1244096..d08720f 100644
+Binary files a/qcrl/readout_optimisation/simulations/__pycache__/updated_utils.cpython-39.pyc and b/qcrl/readout_optimisation/simulations/__pycache__/updated_utils.cpython-39.pyc differ
+diff --git a/qcrl/readout_optimisation/simulations/updated_utils.py b/qcrl/readout_optimisation/simulations/updated_utils.py
+index 8952356..fcf7117 100644
+--- a/qcrl/readout_optimisation/simulations/updated_utils.py
++++ b/qcrl/readout_optimisation/simulations/updated_utils.py
+@@ -1,6 +1,8 @@
+ import time
+ import jax.numpy as jnp
+ import matplotlib.pyplot as plt
++from jaxtyping import Array
++from jax.experimental import sparse
+ 
+ 
+ def complex_plotter(ts, complex_1, complex_2, rot_1, rot_2, name_1, name_2, fig_name):
+@@ -98,7 +100,7 @@ def simple_plotter_debug(ts, complex_1, complex_2, name_1, name_2, fig_name):
+     return fig, ax
+ 
+ 
+-t_pi = 2.0 * jnp.pi
++t_pi = 1.0  # 2.0 * jnp.pi
+ 
+ CHI = 0.16 * 5.35 * t_pi
+ KAPPA = CHI
+@@ -106,7 +108,7 @@ G = 102.9 * t_pi
+ WA = 7062.0 * t_pi
+ WB = 5092.0 * t_pi
+ DELTA = WA - WB
+-GAMMA = 1 / 39.2
++GAMMA = 1 / 39.2 * t_pi
+ KERR = CHI * 0.5 * (G / DELTA) ** 2
+ ANHARM = 0.5 * CHI / (G / DELTA) ** 2
+ SQRT_RATIO = jnp.sqrt(2.0 / 62.5)
+@@ -172,7 +174,7 @@ def get_params(print_params=True):
+         "chi": CHI,
+         "chi_eff": CHI_EFF,
+         "delta_eff": DELTA_EFF,
+-        'kappa_eff': KAPPA_EFF,
++        "kappa_eff": KAPPA_EFF,
+     }
+ 
+     if print_params:
+@@ -181,3 +183,104 @@ def get_params(print_params=True):
+             print(f"{key}: {value}")
+ 
+     return physics_params
++
++
++def dagger(input):
++    return jnp.conjugate(input).T
++
++
++def state2dm(state: Array):
++    """
++    Takes an input state (bra or ket) and outputs a Density Matrix formed from the Outer Product.
++
++    Input:
++    State -> Jax 2D Array
++
++    Let N be the dimensions of the state, a ket should have shape (N, 1) and a bra should have shape (1, N), where N >= 2
++    """
++    state_type = "ket"
++    if len(state.shape) != 2:
++        raise ValueError(
++            "Ensure the state is a 2D array with shape (N, 1) for a ket, or (1, N) for a bra"
++        )
++
++    if state.shape[0] == 1:
++        state_type = "bra"
++    elif state.shape[1] == 1:
++        state_type = "ket"
++    else:
++        raise ValueError(
++            "At least one of the dimensions of the state must be of length greater than 1"
++        )
++
++    if state_type == "ket":
++        dm = state * dagger(state)
++    if state_type == "bra":
++        dm = dagger(state) * state
++    return dm
++
++
++def number_op(N, dtype=jnp.complex64, use_sparse=True):
++    """
++    Makes a diagonal matrix representation of the number operator
++    By default uses jnp.complex64 as the dtype (a jax compatible dtype must be passed)
++    By default use_sparse = True, so a sparse Jax array is made. If sparse = False, the dense representation is made instead.
++    """
++    if not isinstance(N, int):
++        raise ValueError("N must be of int type and non-zero")
++
++    out_matrix = jnp.diag(jnp.arange(0, N, dtype=dtype), k=0)
++    if use_sparse:
++        out_matrix = sparse.BCOO.fromdense(out_matrix)
++    return out_matrix
++
++
++def annihilation_op(N, dtype=jnp.complex64, use_sparse=True):
++    """
++    Outputs matrix representation of Ladder Operator in Fock Basis
++    """
++    if not isinstance(N, int):
++        raise ValueError("N must be of int type and non-zero")
++
++    out_matrix = jnp.diag(jnp.sqrt(jnp.arange(1, N, dtype=dtype)), k=1)
++    if use_sparse:
++        out_matrix = sparse.BCOO.fromdense(out_matrix)
++    return out_matrix
++
++
++def creation_op(N, dtype=jnp.complex64, use_sparse=True):
++    """
++    Outputs matrix representation of Ladder Operator in Fock Basis
++    """
++    if not isinstance(N, int):
++        raise ValueError("N must be of int type and non-zero")
++
++    out_matrix = jnp.diag(jnp.sqrt(jnp.arange(1, N, dtype=dtype)), k=-1)
++    if use_sparse:
++        out_matrix = sparse.BCOO.fromdense(out_matrix)
++    return out_matrix
++
++
++def q_eye(N, dtype=jnp.complex64, use_sparse=True):
++    """
++    Outputs matrix representation of Ladder Operator in Fock Basis
++    """
++    if not isinstance(N, int):
++        raise ValueError("N must be of int type and non-zero")
++
++    out_matrix = jnp.identity(N, dtype=dtype)
++    if use_sparse:
++        out_matrix = sparse.BCOO.fromdense(out_matrix)
++    return out_matrix
++
++
++def handle_diffrax_stats(stats, name="Solution"):
++    max_steps = stats["max_steps"][0]
++    num_accepted_steps = stats["num_accepted_steps"][0]
++    num_rejected_steps = stats["num_rejected_steps"][0]
++    num_steps = stats["num_steps"][0]
++    print(f"{name} Statistics")
++    print(f"max_steps: {max_steps}")
++    print(f"num_accepted_steps: {num_accepted_steps}")
++    print(f"num_rejected_steps: {num_rejected_steps}")
++    print(f"num_steps: {num_steps}")

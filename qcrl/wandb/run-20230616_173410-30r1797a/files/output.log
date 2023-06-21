@@ -1,0 +1,68 @@
+Traceback (most recent call last):
+  File "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/ppo.py", line 144, in <module>
+    env = ResonatorEnv()
+  File "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/readout_optimisation/rl_envs/resonator_environment.py", line 79, in __init__
+    self.pre_compile(time_speed=True)
+  File "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/readout_optimisation/rl_envs/resonator_environment.py", line 131, in pre_compile
+    b_, c_, d_, e_, f_ = self.batched_reward_func(a_)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/traceback_util.py", line 166, in reraise_with_filtered_traceback
+    return fun(*args, **kwargs)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/pjit.py", line 249, in cache_miss
+    outs, out_flat, out_tree, args_flat = _python_pjit_helper(
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/pjit.py", line 155, in _python_pjit_helper
+    args_flat, _, params, in_tree, out_tree, _ = infer_params_fn(
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/api.py", line 301, in infer_params
+    return pjit.common_infer_params(pjit_info_args, *args, **kwargs)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/pjit.py", line 498, in common_infer_params
+    jaxpr, consts, canonicalized_out_shardings_flat = _pjit_jaxpr(
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/pjit.py", line 960, in _pjit_jaxpr
+    jaxpr, final_consts, out_type = _create_pjit_jaxpr(
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/linear_util.py", line 345, in memoized_fun
+    ans = call(fun, *args)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/pjit.py", line 913, in _create_pjit_jaxpr
+    jaxpr, global_out_avals, consts = pe.trace_to_jaxpr_dynamic(
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/profiler.py", line 314, in wrapper
+    return func(*args, **kwargs)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/interpreters/partial_eval.py", line 2150, in trace_to_jaxpr_dynamic
+    jaxpr, out_avals, consts = trace_to_subjaxpr_dynamic(
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/interpreters/partial_eval.py", line 2172, in trace_to_subjaxpr_dynamic
+    ans = fun.call_wrapped(*in_tracers_)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/linear_util.py", line 188, in call_wrapped
+    ans = self.f(*args, **dict(self.params, **kwargs))
+  File "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/readout_optimisation/rl_envs/resonator_environment.py", line 289, in calculate_obs_and_reward
+    mean_batch_reward = jnp.mean(batched_reward)[0]
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/array_methods.py", line 791, in op
+    return getattr(self.aval, f"_{name}")(self, *args)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 4120, in _rewriting_take
+    return _gather(arr, treedef, static_idx, dynamic_idx, indices_are_sorted,
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 4129, in _gather
+    indexer = _index_to_gather(shape(arr), idx)  # shared with _scatter_update
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 4230, in _index_to_gather
+    idx = _canonicalize_tuple_index(len(x_shape), idx)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 4563, in _canonicalize_tuple_index
+    raise IndexError(
+jax._src.traceback_util.UnfilteredStackTrace: IndexError: Too many indices for array: 1 non-None/Ellipsis indices for dim 0.
+The stack trace below excludes JAX-internal frames.
+The preceding is the original exception that occurred, unmodified.
+--------------------
+The above exception was the direct cause of the following exception:
+Traceback (most recent call last):
+  File "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/ppo.py", line 144, in <module>
+    env = ResonatorEnv()
+  File "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/readout_optimisation/rl_envs/resonator_environment.py", line 79, in __init__
+    self.pre_compile(time_speed=True)
+  File "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/readout_optimisation/rl_envs/resonator_environment.py", line 131, in pre_compile
+    b_, c_, d_, e_, f_ = self.batched_reward_func(a_)
+  File "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/readout_optimisation/rl_envs/resonator_environment.py", line 289, in calculate_obs_and_reward
+    mean_batch_reward = jnp.mean(batched_reward)[0]
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/array_methods.py", line 791, in op
+    return getattr(self.aval, f"_{name}")(self, *args)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 4120, in _rewriting_take
+    return _gather(arr, treedef, static_idx, dynamic_idx, indices_are_sorted,
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 4129, in _gather
+    indexer = _index_to_gather(shape(arr), idx)  # shared with _scatter_update
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 4230, in _index_to_gather
+    idx = _canonicalize_tuple_index(len(x_shape), idx)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/jax/_src/numpy/lax_numpy.py", line 4563, in _canonicalize_tuple_index
+    raise IndexError(
+IndexError: Too many indices for array: 1 non-None/Ellipsis indices for dim 0.

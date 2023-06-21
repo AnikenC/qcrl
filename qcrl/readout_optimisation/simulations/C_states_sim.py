@@ -69,7 +69,7 @@ if __name__ == "__main__":
     res_drive_amp = 2.5  # * t_pi
     trans_drive_amp = 0 * res_drive_amp * SIN_ANGLE
 
-    RES_COMPLEX_STATE = -1j * 2.7
+    RES_COMPLEX_STATE = -1j * 2.24
     res_state_imag = RES_COMPLEX_STATE.imag
 
     drive_on_res_gaussian = jnp.asarray(
@@ -300,7 +300,7 @@ if __name__ == "__main__":
     )
 
     fig, ax = plt.subplots(1, num=f"C Separation, Init State: {RES_COMPLEX_STATE}")
-    ax.plot(TS_SIM, separation, label="separation", color="blue")
+    ax.plot(TS_SIM, separation, label=f"max separation: {max_separation}", color="blue")
     ax.plot(
         time_of_max_sep,
         max_separation,

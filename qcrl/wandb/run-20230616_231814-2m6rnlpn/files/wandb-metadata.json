@@ -1,0 +1,44 @@
+{
+    "os": "macOS-10.16-x86_64-i386-64bit",
+    "python": "3.9.11",
+    "heartbeatAt": "2023-06-16T15:18:15.545873",
+    "startedAt": "2023-06-16T15:18:14.627377",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--track"
+    ],
+    "state": "running",
+    "program": "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/ppo.py",
+    "codePath": "qcrl/ppo.py",
+    "git": {
+        "remote": "git@github.com:AnikenC/qcrl.git",
+        "commit": "7a63b59dc79eedac877c45ff9b235e1bd3e94341"
+    },
+    "email": "quantac47@gmail.com",
+    "root": "/Users/chatt07/Desktop/shining_env/QCRL",
+    "host": "Aniken",
+    "username": "chatt07",
+    "executable": "/Users/chatt07/Desktop/shining_env/bin/python3",
+    "cpu_count": 4,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 1400,
+        "min": 1400,
+        "max": 1400
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 1400,
+            "min": 1400,
+            "max": 1400
+        }
+    ],
+    "disk": {
+        "total": 233.46913528442383,
+        "used": 8.439838409423828
+    },
+    "memory": {
+        "total": 8.0
+    }
+}

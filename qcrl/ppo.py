@@ -5,6 +5,7 @@ import random
 from tqdm import tqdm
 from distutils.util import strtobool
 
+from jax import config
 import numpy as np
 
 import torch
@@ -16,7 +17,9 @@ from torch.utils.tensorboard import SummaryWriter
 from torchinfo import summary
 import wandb
 
-from .readout_optimisation.rl_envs.gymnasium_env import ReadoutEnv
+from readout_optimisation.rl_envs.resonator_environment import ResonatorEnv
+
+config.update("jax_enable_x64", True)
 
 # For debugging
 # torch.autograd.set_detect_anomaly(True)
@@ -39,7 +42,7 @@ def parse_args():
         help="if toggled, cuda will be enabled by default")
     parser.add_argument("--track", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
-    parser.add_argument("--wandb-project-name", type=str, default="GateCalibration",
+    parser.add_argument("--wandb-project-name", type=str, default="ReadoutOptimisation",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default="quantumcontrolwithrl",
         help="the entity (team) of wandb's project")
@@ -47,28 +50,39 @@ def parse_args():
         help="whether to print debug info in the terminal or not")
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id", type=str, default="arthur_env",
+    parser.add_argument("--env-id", type=str, default="resonator_env",
         help="the id of the environment")
     parser.add_argument("--num-envs", type=int, default=1, nargs="?", const=True,\
         help="number of environments for parallel processing")
-    parser.add_argument("--num-updates", type=int, default=4000, nargs="?", const=True,
+    parser.add_argument("--num-updates", type=int, default=10000, nargs="?", const=True,
         help="total timesteps of the experiments")
+    parser.add_argument("--update-epochs", type=int, default=3, nargs="?", const=True,
+        help="number of epochs before a policy update")
+    parser.add_argument("--num-minibatches", type=int, default=32, nargs="?", const=True,
+        help="number of minibatches in one batch")
     parser.add_argument("--learning-rate", type=float, default=0.0003, nargs="?", const=True,
         help="the learning rate of the optimizer")
-    parser.add_argument("--batch-size", type=int, default=100, nargs="?", const=True,\
+    parser.add_argument("--batch-size", type=int, default=512, nargs="?", const=True,\
         help="batch size for each update")
     parser.add_argument("--clip-epsilon", type=float, default=0.1, nargs="?", const=True,\
         help="clipping epsilon")
     parser.add_argument("--grad-clip", type=float, default=0.5, nargs="?", const=True,\
         help="gradient clip for optimizer updates")
-    parser.add_argument("--vf-coeff", type=float, default=0.5, nargs="?", const=True,\
+    parser.add_argument("--clip-vloss", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,\
+        help="whether to clip the value loss")
+    parser.add_argument("--clip-coef", type=float, default=0.2, nargs="?", const=True,
+        help="the surrogate clipping coefficient")
+    parser.add_argument("--norm-adv", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+        help="Toggles advantages normalization")
+    parser.add_argument("--vf-coef", type=float, default=0.5, nargs="?", const=True,\
         help="coeff for value loss contribution to total loss")
-    parser.add_argument("--ent-coeff", type=float, default=0.01, nargs="?", const=True,\
+    parser.add_argument("--ent-coef", type=float, default=0.00, nargs="?", const=True,\
         help="entropy coefficient to encourage exploration")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,\
         help="whether to anneal the learning rate over the whole run")
     
     args = parser.parse_args()
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)
     # fmt: on
     return args
 
@@ -137,8 +151,9 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    assert args.env_id == "arthur_env", f"env_id must be arthur_env"
-    env = ReadoutEnv()
+    if args.env_id not in ["arthur_env", "resonator_env"]:
+        raise ValueError("env id can only be arthur_env or resonator_env")
+    env = ResonatorEnv()
     next_obs, info = env.reset(seed=args.seed)
 
     model = CombinedAgent(env).to(device)
@@ -174,34 +189,83 @@ if __name__ == "__main__":
             temp_obs, reward, terminated, truncated, info = env.step(
                 action.cpu().numpy()
             )
-            rewards = torch.tensor(reward).to(device)
+            torch_obs = torch.tensor(temp_obs, dtype=torch.float32).to(device)
+            rewards = torch.tensor(reward, dtype=torch.float32).to(device)
 
             advantages = rewards - critic_value
 
-        new_mean, new_sigma, new_value = model(train_obs)
-        new_logprob = Normal(new_mean, new_sigma).log_prob(action).sum(1)
-        log_ratio = new_logprob - logprob
-        ratio = log_ratio.exp()
+        # flatten the batch
+        b_obs = torch_obs.reshape((-1,) + env.observation_space.shape)
+        b_logprobs = logprob.reshape(-1)
+        b_actions = action.reshape((-1,) + env.action_space.shape)
+        b_advantages = advantages.reshape(-1)
+        b_returns = rewards.reshape(-1)
+        b_values = critic_value.reshape(-1)
 
-        # Policy loss
-        pg_loss1 = -advantages * ratio
-        pg_loss2 = -advantages * torch.clamp(
-            ratio, 1 - args.clip_epsilon, 1 + args.clip_epsilon
-        )
-        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+        b_inds = np.arange(args.batch_size)
+        clipfracs = []
 
-        v_loss = ((new_value - rewards) ** 2).mean()
-        loss = pg_loss + v_loss * args.vf_coeff
+        for epoch in range(args.update_epochs):
+            np.random.shuffle(b_inds)
+            for start in range(0, args.batch_size, args.minibatch_size):
+                end = start + args.minibatch_size
+                mb_inds = b_inds[start:end]
 
-        optimizer.zero_grad()
-        loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
-        optimizer.step()
+                new_mean, new_sigma, new_value = model(b_obs[mb_inds])
+                probs = Normal(new_mean, new_sigma)
+
+                entropy = probs.entropy().sum(1)
+                new_logprob = probs.log_prob(b_actions[mb_inds]).sum(1)
+
+                logratio = new_logprob - b_logprobs[mb_inds]
+                ratio = logratio.exp()
+
+                mb_advantage = b_advantages[mb_inds]
+                if args.norm_adv:
+                    mb_advantage = (mb_advantage - mb_advantage.mean()) / (
+                        mb_advantage.std() + 1e-8
+                    )
+
+                # Policy Loss
+                pg_loss1 = -mb_advantage * ratio
+                pg_loss2 = -mb_advantage * torch.clamp(
+                    ratio, 1 - args.clip_epsilon, 1 + args.clip_epsilon
+                )
+                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+                # Value Loss
+                newvalue = new_value.view(-1)
+                if args.clip_vloss:
+                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
+                    v_clipped = b_values[mb_inds] + torch.clamp(
+                        newvalue - b_values[mb_inds],
+                        -args.clip_coef,
+                        args.clip_coef,
+                    )
+                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
+                    v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                    v_loss = 0.5 * v_loss_max.mean()
+                else:
+                    v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
+
+                entropy_loss = entropy.mean()
+
+                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+
+                optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+                optimizer.step()
+
+        batch_mean_reward = np.asarray(info["mean reward"])
+        batch_mean_max_photon = np.asarray(info["mean max photon"])
+        batch_mean_max_separation = np.asarray(info["mean max separation"])
 
         if args.track:
-            writer.add_scalar("charts/mean_reward", info["mean rewards"], update)
+            writer.add_scalar("charts/mean_reward", batch_mean_reward, update)
+            writer.add_scalar("charts/mean_max_photon", batch_mean_max_photon, update)
             writer.add_scalar(
-                "charts/average_fidelity", info["average fidelity"], update
+                "charts/mean_max_separation", batch_mean_max_separation, update
             )
             writer.add_scalar(
                 "charts/advantage", advantages.detach().mean().numpy(), update
@@ -222,10 +286,24 @@ if __name__ == "__main__":
             writer.add_scalar("losses/total_loss", loss.detach().mean().numpy(), update)
 
         if args.print_debug:
+            max_reward_obtained = info["max reward"]
+            separation_at_max_reward = info["separation at max reward"]
+            photon_at_max_reward = info["photon at max reward"]
+            bandwidth_at_max_reward = info["bandwidth at max reward"]
             print("\n Update", update)
-            print("Average reward", info["mean rewards"])
-            print("Average Gate Fidelity:", info["average fidelity"])
-            print("Max Reward", info["max reward"])
-            print("Max Fidelity", info["max fidelity"])
+            print("Mean Batch Reward", batch_mean_reward)
+            print("Mean Batch Max Separation", batch_mean_max_separation)
+            print("Mean Batch Max Photon", batch_mean_max_photon)
+            print("Max Reward Obtained", max_reward_obtained)
+            print(f"Separation at Max Reward: {separation_at_max_reward}")
+            print(f"Photon at Max Reward: {photon_at_max_reward}")
+            print(f"Bandwidth at Max Reward: {bandwidth_at_max_reward}")
 
-    writer.close()
+        if update % 100 == 0:
+            action_at_max_reward = info["action at max reward"]
+            res_state_at_max_reward = info["res state at max reward"]
+            print(f"Action at max reward: {action_at_max_reward}")
+            print(f"Res State at max reward: {res_state_at_max_reward}")
+
+    if args.track:
+        writer.close()

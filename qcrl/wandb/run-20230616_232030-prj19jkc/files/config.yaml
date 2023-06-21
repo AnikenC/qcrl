@@ -1,0 +1,88 @@
+wandb_version: 1
+
+exp_name:
+  desc: null
+  value: Torched_PPO
+seed:
+  desc: null
+  value: 1
+torch_deterministic:
+  desc: null
+  value: true
+cuda:
+  desc: null
+  value: true
+track:
+  desc: null
+  value: true
+wandb_project_name:
+  desc: null
+  value: ReadoutOptimisation
+wandb_entity:
+  desc: null
+  value: quantumcontrolwithrl
+print_debug:
+  desc: null
+  value: true
+env_id:
+  desc: null
+  value: arthur_env
+num_envs:
+  desc: null
+  value: 1
+num_updates:
+  desc: null
+  value: 10000
+learning_rate:
+  desc: null
+  value: 0.0003
+batch_size:
+  desc: null
+  value: 100
+clip_epsilon:
+  desc: null
+  value: 0.1
+grad_clip:
+  desc: null
+  value: 0.5
+vf_coeff:
+  desc: null
+  value: 0.5
+ent_coeff:
+  desc: null
+  value: 0.01
+anneal_lr:
+  desc: null
+  value: true
+_wandb:
+  desc: null
+  value:
+    code_path: code/qcrl/ppo.py
+    python_version: 3.9.11
+    cli_version: 0.15.3
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1686928830.32817
+    t:
+      1:
+      - 1
+      - 2
+      - 3
+      - 12
+      - 55
+      2:
+      - 1
+      - 2
+      - 3
+      - 12
+      - 55
+      3:
+      - 13
+      - 16
+      - 23
+      - 35
+      4: 3.9.11
+      5: 0.15.3
+      8:
+      - 5

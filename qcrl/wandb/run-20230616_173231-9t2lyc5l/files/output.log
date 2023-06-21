@@ -1,0 +1,38 @@
+time taken for batch of 100 simulations + calculations: 16038.179397583008us
+time taken per simulation of g + e and reward calculation: 160.38179397583008us
+==========================================================================================
+Layer (type:depth-idx)                   Output Shape              Param #
+==========================================================================================
+CombinedAgent                            [100, 104]                --
+├─Linear: 1-1                            [100, 256]                52,480
+├─ReLU: 1-2                              [100, 256]                --
+├─Linear: 1-3                            [100, 256]                65,792
+├─ReLU: 1-4                              [100, 256]                --
+├─Linear: 1-5                            [100, 104]                26,728
+├─Linear: 1-6                            [100, 104]                26,728
+├─Sigmoid: 1-7                           [100, 104]                --
+├─Linear: 1-8                            [100, 1]                  257
+==========================================================================================
+Total params: 171,985
+Trainable params: 171,985
+Non-trainable params: 0
+Total mult-adds (M): 17.20
+==========================================================================================
+Input size (MB): 0.08
+Forward/backward pass size (MB): 0.58
+Params size (MB): 0.69
+Estimated Total Size (MB): 1.35
+==========================================================================================
+env action space shape: (104,)
+env observation space shape: (204,)
+  0%|                                                                                                                 | 0/4000 [00:05<?, ?it/s]
+Traceback (most recent call last):
+  File "/Users/chatt07/Desktop/shining_env/QCRL/qcrl/ppo.py", line 208, in <module>
+    writer.add_scalar("charts/mean_reward", info["mean reward"], update)
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/torch/utils/tensorboard/writer.py", line 388, in add_scalar
+    summary = scalar(
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/torch/utils/tensorboard/summary.py", line 280, in scalar
+    tensor = make_np(tensor).squeeze()
+  File "/Users/chatt07/Desktop/shining_env/lib/python3.9/site-packages/torch/utils/tensorboard/_convert_np.py", line 24, in make_np
+    raise NotImplementedError(
+NotImplementedError: Got <class 'jaxlib.xla_extension.ArrayImpl'>, but numpy array, torch tensor, or caffe2 blob name are expected.

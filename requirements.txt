@@ -14,4 +14,6 @@ sympy
 jaxlib
 complexPyTorch
 torchvision
-pytorch-complex
+qiskit_dynamics[jax]
+pandas
+qiskit_experiments
